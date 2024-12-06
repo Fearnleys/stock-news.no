@@ -1,7 +1,7 @@
 import { db } from './utils/db';
 import 'dotenv/config';
 import { put } from './utils/blob';
-import { openai } from './utils/openai';
+import { azureOpenai } from './utils/openai';
 
 const SUPPORTED_LANGUAGES = ['en'];
 
@@ -31,7 +31,7 @@ async function main() {
     console.log(article.body);
     console.log({ voice });
 
-    const mp3 = await openai.audio.speech.create({
+    const mp3 = await azureOpenai.audio.speech.create({
       model: 'tts-1-hd',
       voice: 'alloy',
       input: article.body,

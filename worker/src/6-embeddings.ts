@@ -1,5 +1,5 @@
 import { db } from './utils/db';
-import { openai } from './utils/openai';
+import { azureOpenai } from './utils/openai';
 
 async function main() {
   const articles = await db
@@ -16,7 +16,7 @@ async function main() {
 
     const text = article.title + ' ' + article.body;
 
-    const res = await openai.embeddings.create({
+    const res = await azureOpenai.embeddings.create({
       input: text,
       model: 'text-embedding-ada-002',
     });

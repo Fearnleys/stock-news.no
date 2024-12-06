@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { db } from './utils/db';
 import { S3, PutObjectCommand } from '@aws-sdk/client-s3';
 import { Transformer } from '@napi-rs/image';
-import { openai } from './utils/openai';
+import { azureOpenai } from './utils/openai';
 
 const s3Client = new S3({
   endpoint: 'https://ams3.digitaloceanspaces.com',
@@ -31,7 +31,7 @@ async function main() {
 
     console.log('Generating image for article', article.id);
 
-    const image = await openai.images
+    const image = await azureOpenai.images
       .generate({
         model: 'dall-e-3',
         prompt: `${article.imagePrompt}. This is related to Sweden`,

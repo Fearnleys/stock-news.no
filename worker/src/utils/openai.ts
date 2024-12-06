@@ -1,4 +1,8 @@
-import { OpenAI } from 'openai';
+import { AzureOpenAI } from 'openai';
+import {
+  DefaultAzureCredential,
+  getBearerTokenProvider,
+} from '@azure/identity';
 import { z } from 'zod';
 
 import 'dotenv/config';
@@ -7,10 +11,22 @@ import {
   parseOpenAiJson,
   removeLastSentence,
 } from './helpers';
+import { Completion } from 'openai/resources/completions';
+import { Stream } from 'openai/streaming';
 
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const credential = new DefaultAzureCredential();
+const scope = 'https://cognitiveservices.azure.com/.default';
+const azureADTokenProvider = getBearerTokenProvider(credential, scope);
+
+export const azureOpenai = new AzureOpenAI({
+  azureADTokenProvider,
+  apiVersion: '2024-11-01-preview',
+  endpoint: process.env.AZURE_OPENAI_ENDPOINT as string,
 });
+
+export const GPT_PROMPT_JOURNALIST = `You are a journalist who writes independent news articles. The news articles you write follow journalistic standards and are informative and engaging for the reader.`;
+export const GPT_PROMPT_ASSISTANT = `You are a helpful assistant`;
+export const GPT_PROMPT_TRANSLATOR = `You are an expert translator`;
 
 export const FUNCTIONS = {
   informationIsRelatedToSweden: {
@@ -121,45 +137,33 @@ export const FUNCTIONS = {
     },
   },
 };
-
-export const GPT_PROMPT_JOURNALIST = `You are a journalist who writes independent news articles. The news articles you write follow journalistic standards and are informative and engaging for the reader.`;
-export const GPT_PROMPT_ASSISTANT = `You are a helpful assistant`;
-export const GPT_PROMPT_TRANSLATOR = `You are an expert translator`;
-
 export async function textIsRelatedToSweden(text: string): Promise<boolean> {
   const bodyContent = `INFORMATION:\n${text}\nEND OF INFORMATION.\nHelp me with classifying the information above. Is the information related to Sweden or not?`;
 
-  const openAiBodyResponse = await openai.chat.completions.create({
-    messages: [
-      {
-        role: 'system',
-        content: GPT_PROMPT_ASSISTANT,
-      },
-      {
-        role: 'user',
-        content: bodyContent,
-      },
-    ],
-    functions: [FUNCTIONS.informationIsRelatedToSweden],
+  const openAiBodyResponse = await azureOpenai.completions.create({
+    model: process.env.AZURE_OPENAI_DEPLOYMENT_NAME as string,
+    prompt: bodyContent,
+    temperature: 0.7,
+    max_tokens: 500,
+    // functions: [FUNCTIONS.informationIsRelatedToSweden],
     function_call: {
       name: FUNCTIONS.informationIsRelatedToSweden.name,
     },
-    model: 'gpt-3.5-turbo-1106',
-    temperature: 0.7,
-    max_tokens: 500,
   });
 
-  const body = openAiBodyResponse.choices[0].message?.function_call?.arguments;
+  const functionCall = openAiBodyResponse.choices[0].message?.functionCall;
+  const body = functionCall?.arguments;
 
   const bodyObject = parseOpenAiJson(body as string);
   return bodyObject.isRelatedToSweden;
 }
 
 export async function articleNewsValue(text: string): Promise<number> {
-  const bodyContent = `ARTICLE:\n${text}\nEND OF ARTICLE.\n Help me ditermin the news value of the article above from a scale of 0 to 10 where 10 means the article has the highest news value possible.`;
+  const bodyContent = `ARTICLE:\n${text}\nEND OF ARTICLE.\n Help me determine the news value of the article above from a scale of 0 to 10 where 10 means the article has the highest news value possible.`;
 
-  const openAiBodyResponse = await openai.chat.completions.create({
-    messages: [
+  const openAiBodyResponse = await azureOpenai.getChatCompletions(
+    process.env.AZURE_OPENAI_DEPLOYMENT_NAME as string,
+    [
       {
         role: 'system',
         content: GPT_PROMPT_ASSISTANT,
@@ -169,32 +173,34 @@ export async function articleNewsValue(text: string): Promise<number> {
         content: bodyContent,
       },
     ],
-    functions: [FUNCTIONS.classifyNewValue],
-    function_call: {
-      name: FUNCTIONS.classifyNewValue.name,
+    {
+      functions: [FUNCTIONS.classifyNewValue],
+      functionCall: {
+        name: FUNCTIONS.classifyNewValue.name,
+      },
+      temperature: 0.7,
+      maxTokens: 500,
     },
-    model: 'gpt-3.5-turbo-1106',
-    temperature: 0.7,
-    max_tokens: 500,
-  });
+  );
 
-  const body = openAiBodyResponse.choices[0].message?.function_call?.arguments;
+  const functionCall = openAiBodyResponse.choices[0].message?.functionCall;
+  const body = functionCall?.arguments;
 
   const bodyObject = parseOpenAiJson(body as string);
   return bodyObject.newsValue;
 }
 
 export async function generateArticle(transcribedText: string) {
-  // body
   const bodyContent = `INFORMATION: ${removeLastSentence(
     transcribedText,
-  )} END OF INFORMATION. 
+  )} END OF INFORMATION.
 
   Help me extract article information based on the information above.
   `;
 
-  const openAiBodyResponse = await openai.chat.completions.create({
-    messages: [
+  const openAiBodyResponse = await azureOpenai.getChatCompletions(
+    process.env.AZURE_GPT4_DEPLOYMENT_NAME as string, // Note: Using GPT-4 deployment
+    [
       {
         role: 'system',
         content: GPT_PROMPT_JOURNALIST,
@@ -204,17 +210,18 @@ export async function generateArticle(transcribedText: string) {
         content: bodyContent,
       },
     ],
-    functions: [FUNCTIONS.getNewsArticleInformation],
-    function_call: {
-      name: FUNCTIONS.getNewsArticleInformation.name,
+    {
+      functions: [FUNCTIONS.getNewsArticleInformation],
+      functionCall: {
+        name: FUNCTIONS.getNewsArticleInformation.name,
+      },
+      temperature: 0.7,
+      maxTokens: 1200,
     },
-    model: 'gpt-4-0613',
-    temperature: 0.7,
-    max_tokens: 1200,
-  });
+  );
 
-  const jsonString = openAiBodyResponse.choices[0].message?.function_call
-    ?.arguments as string;
+  const functionCall = openAiBodyResponse.choices[0].message?.functionCall;
+  const jsonString = functionCall?.arguments as string;
 
   const resJson = parseOpenAiJson(jsonString);
 
@@ -258,8 +265,9 @@ ARTICLE:
 ${body}
 END OF ARTICLE`;
 
-  const openAiBodyResponse = await openai.chat.completions.create({
-    messages: [
+  const openAiBodyResponse = await azureOpenai.getChatCompletions(
+    process.env.AZURE_OPENAI_DEPLOYMENT_NAME as string,
+    [
       {
         role: 'system',
         content: GPT_PROMPT_TRANSLATOR,
@@ -269,19 +277,18 @@ END OF ARTICLE`;
         content: bodyContent,
       },
     ],
-    functions: [FUNCTIONS.getTranslation],
-    function_call: {
-      name: FUNCTIONS.getTranslation.name,
+    {
+      functions: [FUNCTIONS.getTranslation],
+      functionCall: {
+        name: FUNCTIONS.getTranslation.name,
+      },
+      temperature: 0.7,
+      maxTokens: 1800,
     },
-    model: 'gpt-3.5-turbo',
-    temperature: 0.7,
-    max_tokens: 1800,
-  });
+  );
 
-  const jsonString = openAiBodyResponse.choices[0].message?.function_call
-    ?.arguments as string;
-
-  // const sanitizedJsonString = jsonString.replace(/\t/g, '\\t');
+  const functionCall = openAiBodyResponse.choices[0].message?.functionCall;
+  const jsonString = functionCall?.arguments as string;
 
   const resJson = parseOpenAiJson(jsonString);
 

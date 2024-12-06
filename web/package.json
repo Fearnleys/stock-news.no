@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.397.0",
+    "@azure/identity": "^4.5.0",
+    "@azure/openai": "^2.0.0",
     "@clerk/nextjs": "^4.23.2",
     "@heroicons/react": "^2.0.18",
     "@mdx-js/loader": "^2.3.0",
@@ -41,6 +43,7 @@
     "next-seo": "^6.1.0",
     "next-superjson": "^0.0.4",
     "node-fetch": "^3.3.2",
+    "openai": "^4.75.0",
     "pg": "^8.11.1",
     "postcss": "8.4.27",
     "react": "18.2.0",

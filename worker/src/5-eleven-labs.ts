@@ -1,6 +1,6 @@
 import { db } from './utils/db';
 import 'dotenv/config';
-import { openai } from './utils/openai';
+import { azureOpenai } from './utils/openai';
 import { v4 as uuidv4 } from 'uuid';
 import { put } from './utils/blob';
 
@@ -25,21 +25,23 @@ const GPT_PROMPT_ASSISTANT = `You are a helpful assistant`;
 
     const articleSummaryPrompt = `ARTICLE:\n ${article.title}\n${article.body}\nEND OF ARTICLE.\n\nWrite an short summary of the article using 3-5 sentences.`;
 
-    const articleSummaryPromptResponse = await openai.createChatCompletion({
-      messages: [
-        {
-          role: 'system',
-          content: GPT_PROMPT_ASSISTANT,
-        },
-        {
-          role: 'user',
-          content: articleSummaryPrompt,
-        },
-      ],
-      model: 'gpt-3.5-turbo',
-      temperature: 0.7,
-      max_tokens: 1200,
-    });
+    const articleSummaryPromptResponse = await azureOpenai.createChatCompletion(
+      {
+        messages: [
+          {
+            role: 'system',
+            content: GPT_PROMPT_ASSISTANT,
+          },
+          {
+            role: 'user',
+            content: articleSummaryPrompt,
+          },
+        ],
+        model: 'gpt-3.5-turbo',
+        temperature: 0.7,
+        max_tokens: 1200,
+      },
+    );
 
     let articleSummary = articleSummaryPromptResponse.data.choices[0].message
       ?.content as string;
